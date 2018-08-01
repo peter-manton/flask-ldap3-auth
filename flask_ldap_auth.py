@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-
 from functools import wraps
 from flask import Blueprint, current_app, jsonify, Response, request, url_for
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import BadSignature, SignatureExpired
+from ldap3 import Server, Connection, NTLM
+from ldap3.core.exceptions import LDAPException, LDAPBindError
 import json
-import ldap
 
 
 token = Blueprint('token', __name__)
@@ -25,22 +25,20 @@ class User(object):
         self.username = username
 
     def verify_password(self, password):
-        connection = ldap.initialize(current_app.config['LDAP_AUTH_SERVER'])
-        result = connection.search_s(
-            current_app.config['LDAP_TOP_DN'],
-            ldap.SCOPE_ONELEVEL,
-            '(uid={})'.format(self.username)
-            )
-        if not result:
-            return False
-        dn = result[0][0]
         try:
-            connection.bind_s(dn, password)
-        except ldap.INVALID_CREDENTIALS:
+            server = Server(current_app.config['LDAP_AUTH_SERVER'])
+            conn = Connection(server, user=self.username, password=password, authentication=NTLM, auto_bind=True)
+            conn.bind()
+        except LDAPBindError:
+            print('Error: Unable to authenticate user.')
+            return False
+        except LDAPException as err:
+            print('Error: ' + str(err))
             return False
         else:
-            connection.unbind_s()
+            conn.unbind()
             return True
+
 
     def generate_auth_token(self):
         s = Serializer(current_app.config['SECRET_KEY'], expires_in=3600)
