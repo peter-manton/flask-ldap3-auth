@@ -1,7 +1,9 @@
-# Flask-LDAP-Auth
+# Flask-LDAP3-Auth
 
-Flask-LDAP is intended to be a simple Flask extension that allows you
+Flask-LDAP3 is intended to be a simple Flask extension that allows you
 to perform authentication against a LDAP server.
+
+This version adds support for ldap3 i.e. if you are using python 3 or above - as the original only worked with < version 3.
 
 The code is quite straight-forward, and can be hacked to implement other auth techniques.
 
