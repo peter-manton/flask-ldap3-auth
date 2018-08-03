@@ -5,7 +5,7 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, Response, request, url_for
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import BadSignature, SignatureExpired
-from ldap3 import Server, Connection, NTLM
+from ldap3 import Server, Connection, NTLM, SUBTREE
 from ldap3.core.exceptions import LDAPException, LDAPBindError
 import json
 
@@ -51,7 +51,8 @@ class User(object):
             data = s.loads(token)
         except (BadSignature, SignatureExpired, TypeError):
             return None
-        return User(data['username'])
+        else:
+            return User(data['username'])
 
 
 def authenticate():
@@ -75,11 +76,37 @@ def login_required(func):
     """LDAP authentication decorator"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not User.verify_auth_token(auth.username):
+        try:
+            auth = request.headers['X-API-KEY']
+        except KeyError:
+            return authenticate()
+
+        if not auth or not User.verify_auth_token(request.headers['X-API-KEY']):
             return authenticate()
         return func(*args, **kwargs)
     return wrapper
+
+
+def auth_user(user):
+    server = Server(current_app.config['LDAP_AUTH_SERVER'])
+    conn = Connection(server, user=current_app.config['LDAP_SERVICE_USER'], password=current_app.config['LDAP_SERVICE_USER_PASSWORD'], authentication=NTLM, auto_bind=True)
+    conn.bind()
+
+    conn.search(search_base=current_app.config['LDAP_TOP_DN'],
+                search_filter='(&(objectClass=person)(memberOf=' + current_app.config['LDAP_API_SECURITY_GROUP_CN'] + '))',
+                search_scope=SUBTREE,
+                attributes=['sAMAccountName'], size_limit=0)
+    results = conn.entries
+
+    conn.unbind()
+
+    for result in results:
+        for username in result:
+            if str(username).lower() == str(user).lower():
+                return True
+
+    # else return false
+    return False
 
 
 @token.route('/request-token', methods=['POST'])
@@ -87,11 +114,11 @@ def request_token():
     """Simple app to generate a token"""
     auth = request.authorization
     user = User(auth.username)
-    print(auth.username)
-    if not auth or not user.verify_password(auth.password):
+    # verify user password and check whether user is authorized to use the API
+    if not auth or not user.verify_password(auth.password) or not auth_user(str.split(User(auth.username).username, '\\')[1]):
         return authenticate()
     response = {
-        'token': user.generate_auth_token() + ':'
+        'token': user.generate_auth_token()
         }
     return jsonify(response)
 
