@@ -23,8 +23,8 @@ $ pip install flask-ldap-auth
 
 ## New Features
 
-Users are now authorized with an AD security group
-The token is now passed via a custom HTTP header (rather than BASIC AUTH) - specifically X-API-KEY
+ * Users are now authorized with an AD security group
+ * The token is now passed via a custom HTTP header (rather than BASIC AUTH) - specifically X-API-KEY
 
 ## Usage
 
