@@ -21,28 +21,51 @@ Of course, the preferred way is via pip
 $ pip install flask-ldap-auth
 ```
 
+## New Features
+
+Users are now authorized with an AD security group
+The token is now passed via a custom HTTP header (rather than BASIC AUTH) - specifically X-API-KEY
+
 ## Usage
 
 In you brand new Flask app (say `hello.py`), you can use flask-ldap like this:
 
 ```python
 
-from flask_ldap_auth import login_required, token
-from flask import Flask
+from flask_ldap3_auth import login_required, token, User
+from flask_restplus import Resource, Api
+from flask import Flask, request
+from shlex import quote
+import os, json
 
+# define how we will authorize requests
+authorizations = {
+    'apikey' : {
+        'type' : 'apiKey',
+        'in' : 'header',
+        'name' : 'X-API-KEY'
+    }
+}
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'somethingsecret'
-app.config['LDAP_AUTH_SERVER'] = 'ldap://your_ldap_server_address'
-app.config['LDAP_TOP_DN'] = 'ou=people,dc=your_org,dc=your_domain'
+app.config['SECRET_KEY'] = """superstrongpassword"""
+app.config['LDAP_AUTH_SERVER'] = 'ldap://127.0.0.1'
+app.config['LDAP_TOP_DN'] = 'CN=Users,DC=yourdomain,DC=tld'
+app.config['LDAP_SERVICE_USER'] = "yourdomain\\serviceuser"
+app.config['LDAP_SERVICE_USER_PASSWORD'] = """superstrongpassword"""
+app.config['LDAP_API_SECURITY_GROUP_CN'] = 'cn=API-USERS,cn=Users,DC=yourdomain,DC=tld'
 app.register_blueprint(token, url_prefix='/auth')
 
+api = Api(app, authorizations=authorizations)
 
-@app.route('/')
-@login_required
-def hello():
-    return 'Hello, world'
-
+# submits a job for processing
+@api.route('/test')
+class API_Test(Resource):
+    @login_required
+    @api.doc(security='apikey', params={'testparam': 'Test Parameter'})
+    def post(self):
+        user = str(User.verify_auth_token(request.headers['X-API-KEY']).username)
+        return {'result': user}
 
 if __name__ == '__main__':
     app.run()
